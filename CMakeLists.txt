@@ -237,6 +237,34 @@ if(NOT BUILD_X64)
         set_property(TARGET BestSpeechDiagnostics PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
 
+    # Shipped with the product: the settings dialog. 32-bit only -- it is an
+    # ordinary application, and one build runs everywhere the engines do.
+    add_executable(BestSpeechConfig WIN32
+        tools/bestspeech_config.cpp
+        tools/bestspeech_config.rc
+    )
+
+    target_include_directories(BestSpeechConfig PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+    )
+
+    target_link_libraries(BestSpeechConfig PRIVATE
+        comctl32 ole32 oleaut32 advapi32 user32 gdi32 sapi
+    )
+
+    target_compile_definitions(BestSpeechConfig PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+        UNICODE
+        _UNICODE
+    )
+
+    if(MSVC)
+        target_compile_options(BestSpeechConfig PRIVATE /W3 /MP)
+        set_property(TARGET BestSpeechConfig PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+
     file(GLOB BESTSPEECH_ENGINE_DLLS
         "${CMAKE_CURRENT_SOURCE_DIR}/bin/b32_tts.dll"
         "${CMAKE_CURRENT_SOURCE_DIR}/bin/dll_*.dll"

@@ -8,7 +8,7 @@
 ; Build with tools\build_all.bat, which stages output\ and then invokes ISCC on this file.
 
 #define AppName "BestSpeech SAPI5 Voices"
-#define AppVersion "2.0.0"
+#define AppVersion "3.0.0"
 #define AppPublisher "Gozaltech"
 #define AppURL "http://gozaltech.org"
 #define OutputDir "..\output"
@@ -46,6 +46,11 @@ UninstallDisplayIcon={app}\BestspeechSAPI.dll
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Tasks]
+; Optional desktop shortcut to the configuration utility, offered on its own
+; wizard page so the choice is reachable with a screen reader.
+Name: "desktopicon"; Description: "Create a &desktop icon for the BestSpeech configuration utility"; GroupDescription: "{cm:AdditionalIcons}"
+
 [Files]
 ; --- 32-bit SAPI engine, the worker process, and the engine shim ---
 Source: "..\output\BestspeechSAPI.dll";   DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
@@ -53,6 +58,7 @@ Source: "..\output\BestspeechServer.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\output\b32_wrapper.dll";      DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
 Source: "..\output\b32_helper.exe";       DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
 Source: "..\output\BestSpeechDiagnostics.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "..\output\BestSpeechConfig.exe";      DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
 
 ; --- the speech engines themselves ---
 Source: "..\output\b32_tts.dll"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
@@ -65,8 +71,10 @@ Source: "..\output\x64\BestSpeechDiagnostics.exe"; DestDir: "{app}\x64"; \
     Flags: ignoreversion restartreplace uninsrestartdelete; Check: Is64BitInstallMode
 
 [Icons]
+Name: "{group}\BestSpeech configuration"; Filename: "{app}\BestSpeechConfig.exe"
 Name: "{group}\Check BestSpeech voices"; Filename: "{app}\BestSpeechDiagnostics.exe"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\BestSpeech configuration"; Filename: "{app}\BestSpeechConfig.exe"; Tasks: desktopicon
 
 [Code]
 var

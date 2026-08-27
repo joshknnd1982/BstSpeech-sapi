@@ -26,6 +26,25 @@ enum class translit_mode { none, greek, cyrillic };
 // Polish only spells them one at a time instead of reading the number.
 enum class number_mode { native, greek, polish, japanese };
 
+// The ~n text-parser switches (bit n-1 = ~n<n>) and, one bit up, the ~~2
+// read-immediately switch. A bit is set only where the switch was measured to be
+// swallowed -- never read aloud as text, never silencing or crashing synthesis.
+// Measured per dll with a fresh engine session per utterance, because these
+// modes persist across utterances inside one session and contaminate any
+// sequential test; re-checked by tools/verify_engines.py.
+//
+// Two findings worth stating: the dlls boot with every switch OFF, including
+// ~n9 times-of-day and ~n10 abbreviations, whose "default on" in the Keynote
+// GOLD manual does not hold for these builds -- which is why turning a switch
+// on is the direction that changes audio. And which switches audibly do
+// anything varies by frontend (~n1 through ~n4 everywhere; ~n7 on the Dutch,
+// French, German, Hebrew, Portuguese and Spanish dlls; ~n9 and ~n10 on the
+// English ones); the rest are swallowed without effect, and are still sent so
+// the setting reaches any engine that honours it.
+[[nodiscard]] inline constexpr unsigned parser_bit(int n) { return 1u << (n - 1); }
+inline constexpr unsigned PARSER_IMMEDIATE = 1u << 10;
+inline constexpr unsigned PARSER_NONE = 0;
+
 struct engine_info
 {
     const char*   id;             // short stable id, used in registry token ids
@@ -40,6 +59,7 @@ struct engine_info
     // ahead of every utterance, at the engine's default gain because the ~g that
     // follows has not been applied yet. Every other engine obeys it.
     bool          inflection;
+    unsigned      parser_cmds;    // which ~n switches this frontend obeys, see above
     translit_mode translit;
     number_mode   numbers;
     DWORD         sample_rate;    // measured; the v2 dlls do not all share one
@@ -58,33 +78,41 @@ struct engine_info
 // internal limiter, so the trim stops just short of that and keeps some headroom.
 inline constexpr int V2_GAIN_TRIM = 10;
 
+// All ten ~n switches are swallowed cleanly by every command-accepting dll.
+// ~~2 is too, with one exception: the Hebrew dll crashes outright on ~~2,1]
+// followed by text, so Hebrew alone does not get the read-immediately bit.
+inline constexpr unsigned PARSER_N_ALL =
+    parser_bit(1) | parser_bit(2) | parser_bit(3) | parser_bit(4) | parser_bit(5) |
+    parser_bit(6) | parser_bit(7) | parser_bit(8) | parser_bit(9) | parser_bit(10);
+inline constexpr unsigned PARSER_COMMON = PARSER_N_ALL | PARSER_IMMEDIATE;
+
 inline constexpr engine_info engines[] = {
     { "classic", L"English (Classic 1994)", L"b32_tts.dll", L"409", 0x0409, 1252,
-      cmd_mode::classic, true,  translit_mode::none,     number_mode::native,   11025, 0,             14, L"point",     L',' },
+      cmd_mode::classic, true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   11025, 0,             14, L"point",     L',' },
     { "eng",     L"English",                L"dll_eng.dll", L"409", 0x0409, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"point",     L',' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"point",     L',' },
     { "dut",     L"Dutch",                  L"dll_dut.dll", L"413", 0x0413, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"komma",     L'.' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"komma",     L'.' },
     { "fre",     L"French",                 L"dll_fre.dll", L"40c", 0x040C, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"virgule",   L' ' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"virgule",   L' ' },
     { "ger",     L"German",                 L"dll_ger.dll", L"407", 0x0407, CP_UTF8,
-      cmd_mode::tilde,   false, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"Komma",     L'.' },
+      cmd_mode::tilde,   false, PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"Komma",     L'.' },
     { "gre",     L"Greek",                  L"dll_gre.dll", L"408", 0x0408, CP_UTF8,
-      cmd_mode::none,    true,  translit_mode::greek,    number_mode::greek,    10800, V2_GAIN_TRIM,   1, L"\u03ba\u03cc\u03bc\u03bc\u03b1", L'.' },
+      cmd_mode::none,    true,  PARSER_NONE,   translit_mode::greek,    number_mode::greek,    10800, V2_GAIN_TRIM,   1, L"\u03ba\u03cc\u03bc\u03bc\u03b1", L'.' },
     { "heb",     L"Hebrew",                 L"dll_heb.dll", L"40d", 0x040D, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"\u05e0\u05e7\u05d5\u05d3\u05d4", L',' },
+      cmd_mode::tilde,   true,  PARSER_N_ALL,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"\u05e0\u05e7\u05d5\u05d3\u05d4", L',' },
     { "ita",     L"Italian",                L"dll_ita.dll", L"410", 0x0410, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"virgola",   L'.' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"virgola",   L'.' },
     { "jpn",     L"Japanese",               L"dll_jpn.dll", L"411", 0x0411, CP_UTF8,
-      cmd_mode::none,    true,  translit_mode::none,     number_mode::japanese, 10800, V2_GAIN_TRIM,   1, L"\u3066\u3093",  L',' },
+      cmd_mode::none,    true,  PARSER_NONE,   translit_mode::none,     number_mode::japanese, 10800, V2_GAIN_TRIM,   1, L"\u3066\u3093",  L',' },
     { "pol",     L"Polish",                 L"dll_pol.dll", L"415", 0x0415, CP_UTF8,
-      cmd_mode::none,    true,  translit_mode::none,     number_mode::polish,   10800, V2_GAIN_TRIM,   1, L"przecinek", L' ' },
+      cmd_mode::none,    true,  PARSER_NONE,   translit_mode::none,     number_mode::polish,   10800, V2_GAIN_TRIM,   1, L"przecinek", L' ' },
     { "por",     L"Portuguese",             L"dll_por.dll", L"816", 0x0816, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"v\u00edrgula", L'.' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"v\u00edrgula", L'.' },
     { "rus",     L"Russian",                L"dll_rus.dll", L"419", 0x0419, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::cyrillic, number_mode::native,   10800, V2_GAIN_TRIM,  14, L"\u0437\u0430\u043f\u044f\u0442\u0430\u044f", L' ' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::cyrillic, number_mode::native,   10800, V2_GAIN_TRIM,  14, L"\u0437\u0430\u043f\u044f\u0442\u0430\u044f", L' ' },
     { "spa",     L"Spanish",                L"dll_spa.dll", L"40a", 0x040A, CP_UTF8,
-      cmd_mode::tilde,   true,  translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"punto",     L'.' },
+      cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"punto",     L'.' },
 };
 
 inline constexpr int engine_count = static_cast<int>(sizeof(engines) / sizeof(engines[0]));

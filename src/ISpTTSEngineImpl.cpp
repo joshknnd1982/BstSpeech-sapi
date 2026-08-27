@@ -6,6 +6,7 @@
 
 #include "utils.hpp"
 #include "text_pipeline.hpp"
+#include "user_settings.hpp"
 #include "ISpTTSEngineImpl.hpp"
 #include "debug_log.h"
 #include "helper_client.h"
@@ -41,6 +42,14 @@ std::wstring helper_executable(const wchar_t* install_dir)
 // flag per engine, set once and never cleared: if an engine is silent here it stays
 // silent, and every later utterance should take the path that works.
 volatile LONG g_worker_engines = 0;
+
+// Set once the user's text-processing switches have ever been sent non-default in
+// this process, and never cleared. The switches persist inside an engine session,
+// and a cancelled utterance can skip the suffix that restores them -- so once any
+// have been touched, every following utterance keeps stating explicit values, even
+// after the user returns to the defaults, or a stuck mode could outlive the setting
+// that caused it.
+volatile LONG g_flags_touched = 0;
 
 // The engine's measured response to its ~r command, as a speed factor relative to ~r0.
 // The documented "percentage of normal speed" only holds at the slow end; going fast the
@@ -109,13 +118,17 @@ struct synth_params {
 };
 
 [[nodiscard]] synth_params build_params(const engine_info& eng, const voice_info& voice,
-                                        int sapi_rate, int sapi_pitch, unsigned short volume)
+                                        int sapi_rate, int sapi_pitch, unsigned short volume,
+                                        const settings::global_settings& user)
 {
     synth_params out;
 
-    const float wanted_speed = sapi_rate_to_speed(sapi_rate);
+    // The user's rate multiplies what the SAPI client asked for, and their volume
+    // adds to its gain, so a screen reader's own controls keep working on top.
+    const float wanted_speed = sapi_rate_to_speed(sapi_rate) *
+                               (static_cast<float>(user.rate_percent) / 100.0f);
     const float pitch_factor = sapi_pitch_to_factor(sapi_pitch);
-    const int gain_db = volume_to_gain_db(volume);
+    const int gain_db = volume_to_gain_db(volume) + user.volume_db;
 
     if (eng.commands == cmd_mode::none) {
         // These frontends ignore inline commands completely, so rate goes through the
@@ -485,13 +498,32 @@ STDMETHODIMP ISpTTSEngineImpl::SetObjectToken(ISpObjectToken* pToken)
         // is recovered without having to parse a localized display name back apart.
         int engine_index = 0;
         int voice_index = 0;
+        custom_ = false;
+        custom_engine_ = false;
 
         utils::out_ptr<wchar_t> engine_id(CoTaskMemFree);
         if (SUCCEEDED(attr->GetStringValue(L"BstEngine", engine_id.address())) && engine_id.get()) {
-            engine_index = engine_by_id(utils::wstring_to_string(engine_id.get()).c_str());
-            if (engine_index < 0) {
-                engine_index = 0;
+            const std::string id = utils::wstring_to_string(engine_id.get());
+            if (id == "custom") {
+                // The language-less Custom Voice: its engine is whatever the
+                // configuration utility last saved, re-resolved per utterance.
+                custom_ = true;
+                custom_engine_ = true;
+                engine_index = settings::load_custom_voice().engine_index;
+            } else {
+                engine_index = engine_by_id(id.c_str());
+                if (engine_index < 0) {
+                    engine_index = 0;
+                }
             }
+        }
+
+        // A per-language custom token: the engine above stands, but the voice
+        // parameters come from the utility's snapshot.
+        utils::out_ptr<wchar_t> custom_flag(CoTaskMemFree);
+        if (SUCCEEDED(attr->GetStringValue(L"BstCustom", custom_flag.address())) &&
+            custom_flag.get() && wcscmp(custom_flag.get(), L"1") == 0) {
+            custom_ = true;
         }
 
         utils::out_ptr<wchar_t> voice_id(CoTaskMemFree);
@@ -546,6 +578,14 @@ STDMETHODIMP ISpTTSEngineImpl::GetOutputFormat(
         return E_OUTOFMEMORY;
     }
 
+    // The Custom Voice's engine can have been changed by the utility since the
+    // last stream, and the classic and v2 engines run at different rates. The
+    // per-language custom tokens have their engine pinned, so only the
+    // language-less one re-resolves.
+    if (custom_engine_) {
+        voice_ = voice_attributes(settings::load_custom_voice().engine_index, 0);
+    }
+
     // Declared from the table rather than by loading the engine here: the shim keeps
     // its audio-capture state per thread, and SAPI does not promise that GetOutputFormat
     // and Speak run on the same one. Opening the engine on this thread could bind it to
@@ -580,8 +620,32 @@ STDMETHODIMP ISpTTSEngineImpl::Speak(
 #endif
 
     try {
+        // A custom token re-reads the utility's snapshot for every utterance;
+        // the language-less one takes its engine from it as well.
+        settings::custom_voice cv;
+        if (custom_) {
+            cv = settings::load_custom_voice();
+            if (custom_engine_) {
+                voice_ = voice_attributes(cv.engine_index, 0);
+            }
+        }
+
         const engine_info& eng = voice_.engine();
-        const voice_info& voice = voice_.voice();
+
+        // Re-read on every utterance, so a change made in the configuration
+        // utility lands on the next thing a running screen reader says.
+        const settings::global_settings user = settings::load_global();
+        const voice_info voice = custom_
+            ? cv.voice
+            : settings::effective_voice(eng, voice_.get_voice_index());
+
+        const bool flags_nondefault = !user.flags.is_default();
+        if (flags_nondefault) {
+            InterlockedExchange(&g_flags_touched, 1);
+        }
+        const settings::text_flags* flag_ptr =
+            (flags_nondefault || InterlockedCompareExchange(&g_flags_touched, 0, 0))
+                ? &user.flags : nullptr;
 
         long sapi_rate = 0;
         pOutputSite->GetRate(&sapi_rate);
@@ -596,6 +660,11 @@ STDMETHODIMP ISpTTSEngineImpl::Speak(
 
         DEBUG_LOG("=== Speak: engine=%s voice=%ls, SAPI rate=%d volume=%u ===",
                   eng.id, voice.name, static_cast<int>(sapi_rate), sapi_volume);
+        if (user.rate_percent != 100 || user.volume_db != 0 || flags_nondefault) {
+            DEBUG_LOG("  user settings: rate %d%%, volume %+d dB, text flags %s",
+                      user.rate_percent, user.volume_db,
+                      flags_nondefault ? "custom" : "default");
+        }
 
         SpeakContext ctx;
         ctx.caller = pOutputSite;
@@ -682,7 +751,7 @@ STDMETHODIMP ISpTTSEngineImpl::Speak(
             const unsigned short frag_volume = static_cast<unsigned short>(
                 std::clamp<int>(sapi_volume * frag->State.Volume / 100, 0, 100));
 
-            synth_params sp = build_params(eng, voice, frag_rate, frag_pitch, frag_volume);
+            synth_params sp = build_params(eng, voice, frag_rate, frag_pitch, frag_volume, user);
 
             const std::wstring body = (frag->State.eAction == SPVA_SpellOut)
                 ? text::prepare_spelled(raw, eng)
@@ -698,9 +767,12 @@ STDMETHODIMP ISpTTSEngineImpl::Speak(
                 PITCH_MIN_HZ, PITCH_MAX_HZ);
 
             std::wstring full = text::command_prefix(eng, voice, sp.native_rate,
-                                                     pitch_hz, sp.native_gain);
+                                                     pitch_hz, sp.native_gain, flag_ptr);
             full += body;
             if (eng.commands != cmd_mode::none) {
+                // Restore any parser switch the prefix changed before flushing, so
+                // the flush itself cannot be spelled or have its punctuation named.
+                full += text::command_suffix(eng, flag_ptr);
                 full += L" ~|";  // flush the engine's phrase buffer
             }
 

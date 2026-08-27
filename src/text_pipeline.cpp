@@ -600,8 +600,40 @@ std::string encode(const std::wstring& text, const engine_info& eng)
     return out;
 }
 
+namespace {
+
+// One ~n switch and where it lives in text_flags. The engines boot with every
+// switch off (measured), so off is the default the suffix restores.
+struct parser_switch { int n; bool settings::text_flags::*member; };
+
+// Prefix order puts ~n3 (speak punctuation) last: once that mode is on, the
+// engine names punctuation wherever it sees it, so nothing with a ']' in it may
+// follow. The suffix in command_suffix() turns it off first, then the rest.
+constexpr parser_switch PARSER_SWITCHES[] = {
+    { 1,  &settings::text_flags::spell_words         },
+    { 2,  &settings::text_flags::digits_individually },
+    { 4,  &settings::text_flags::speak_whitespace    },
+    { 5,  &settings::text_flags::math_mode           },
+    { 6,  &settings::text_flags::full_numbers        },
+    { 7,  &settings::text_flags::caps_as_words       },
+    { 8,  &settings::text_flags::control_chars       },
+    { 9,  &settings::text_flags::times_of_day        },
+    { 10, &settings::text_flags::abbreviations       },
+    { 3,  &settings::text_flags::speak_punctuation   },
+};
+
+void append_parser_cmd(std::wstring& out, int n, bool on)
+{
+    out += L"~n";
+    out += std::to_wstring(n);
+    out += on ? L",1]" : L",0]";
+}
+
+}  // namespace
+
 std::wstring command_prefix(const engine_info& eng, const voice_info& voice,
-                            int native_rate, int pitch_hz, int gain_db)
+                            int native_rate, int pitch_hz, int gain_db,
+                            const settings::text_flags* flags)
 {
     if (eng.commands == cmd_mode::none) {
         return {};
@@ -639,6 +671,42 @@ std::wstring command_prefix(const engine_info& eng, const voice_info& voice,
     // German is the one engine with no inflection command; it reads ~h out as text.
     if (eng.inflection) {
         out += L"~h" + std::to_wstring(voice.inflection) + L"]";
+    }
+
+    if (flags) {
+        // Explicit values for every switch the engine obeys, every time: the
+        // switches persist inside an engine session, and a cancelled utterance
+        // can skip the restoring suffix, so each utterance states its own state.
+        for (const parser_switch& p : PARSER_SWITCHES) {
+            if (eng.parser_cmds & parser_bit(p.n)) {
+                append_parser_cmd(out, p.n, (*flags).*(p.member));
+            }
+        }
+        if (eng.parser_cmds & PARSER_IMMEDIATE) {
+            out += flags->phrase_prediction ? L"~~2,1]" : L"~~2,0]";
+        }
+    }
+    return out;
+}
+
+std::wstring command_suffix(const engine_info& eng, const settings::text_flags* flags)
+{
+    if (!flags || eng.commands == cmd_mode::none) {
+        return {};
+    }
+
+    std::wstring out;
+    // ~n3 off first, so the brackets of the commands that follow cannot be
+    // named aloud while punctuation mode is still active.
+    for (int i = static_cast<int>(sizeof(PARSER_SWITCHES) / sizeof(PARSER_SWITCHES[0])) - 1;
+         i >= 0; --i) {
+        const parser_switch& p = PARSER_SWITCHES[i];
+        if ((eng.parser_cmds & parser_bit(p.n)) && (*flags).*(p.member)) {
+            append_parser_cmd(out, p.n, false);
+        }
+    }
+    if ((eng.parser_cmds & PARSER_IMMEDIATE) && flags->phrase_prediction) {
+        out += L"~~2,0]";
     }
     return out;
 }

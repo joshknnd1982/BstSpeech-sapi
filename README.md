@@ -39,11 +39,97 @@ byte-identical audio.
 sentence boundary events, bookmarks, spell-out and silence fragments, and correct
 per-engine output sample rates.
 
+**A configuration utility.** "BestSpeech configuration" on the Start menu adjusts
+every parameter the engines expose -- per-voice pitch, inflection, head size,
+excitation and unvoiced volume, a global rate and volume on top of whatever the SAPI
+client asks for, and the engines' own text-processing switches. Every change is saved
+as it is made and heard on the next utterance of any running SAPI application.
+
+**A Custom Voice, in every language.** "BestSpeech Custom Voice" mirrors the
+configuration utility: whatever language and voice parameters the utility showed when
+it was last closed, that is what it speaks. Alongside it, every language whose engine
+accepts voice commands publishes a pinned variant -- "BestSpeech Custom Voice -
+German" and so on -- that speaks that language with the same sculpted parameters, and
+carries a truthful Language attribute so applications that filter voices by language
+find it. A voice you shape once, available everywhere.
+
 ## Installing
 
 Run `BestSpeechSAPI_Setup.exe` and accept the elevation prompt — registering voices
 writes to `HKEY_LOCAL_MACHINE`. The voices appear immediately in any SAPI5 application;
 restart the application if it caches its voice list.
+
+## The configuration utility
+
+"BestSpeech configuration" on the Start menu (`BestSpeechConfig.exe` in the install
+directory) is a plain Win32 dialog: every control is labelled, carries an access key
+and sits in the tab order, which is what a screen reader handles best.
+
+Every change is written the moment it is made, to
+`HKEY_CURRENT_USER\Software\BestSpeech`, and the engine re-reads those values on every
+utterance — so a change lands on the very next thing a running screen reader says,
+nothing needs restarting, and everything is already saved when the dialog closes.
+"Play sample" speaks the selected voice through SAPI itself, current settings included.
+
+**Per voice** — pick the language and voice at the top, then adjust pitch (43 to 413
+Hz), inflection (-300 flat to 100 lively), unvoiced volume, head size (obeyed by the
+classic English engine only) and excitation. Overrides are stored per voice, keyed the
+same way as the voice tokens so they survive an upgrade; "Reset this voice" returns
+the built-in character.
+
+**Global** — the rate (25 to 400 percent) multiplies whatever rate the SAPI client
+asks for, and the volume adjustment (-40 to +12 dB) adds to its volume, so the screen
+reader's own controls keep working on top. Greek, Japanese and Polish, whose frontends
+take no inline commands, get both through the time stretcher and gain scaling instead.
+
+**Text processing** — the engines' own parser switches (`~n1` through `~n10`, and the
+`~~2` read-immediately command behind "Phrase prediction"). Every switch was measured
+against every dll — fresh engine session per utterance, since these modes persist and
+contaminate sequential tests — and is only ever sent where it is swallowed cleanly.
+Which switches audibly do something varies by frontend:
+
+| Setting | Audibly works on |
+|---|---|
+| Number processing off (speak digits individually) | every command-taking engine |
+| Spell out all words | every command-taking engine |
+| Speak punctuation | every command-taking engine |
+| Speak spaces and line breaks | every command-taking engine |
+| Speak capitalized letter groups as words | Dutch, French, German, Hebrew, Portuguese, Spanish |
+| Expand abbreviations | the English engines |
+| Speak times of day | the English engines |
+| Math mode, full numbers, control characters, phrase prediction | swallowed everywhere, no audible effect measured |
+
+Three measured details shape how the switches are sent. The dlls boot with every
+switch off — the Keynote manual's "default on" for times-of-day and abbreviations does
+not hold for these builds. The modes persist for the life of an engine session, so the
+engine states every switch explicitly on each utterance and restores them after the
+text, ahead of the `~|` flush — without that, a mode like punctuation naming names the
+flush itself and every utterance grows a second of junk. And the Hebrew dll crashes
+outright on `~~2,1]` followed by text, so Hebrew alone never receives the
+phrase-prediction command.
+
+**The Custom Voice** — closing the utility (any way: the Close button, Escape, or
+Alt+F4) snapshots the selected language and that voice's current parameters into
+`HKEY_CURRENT_USER\Software\BestSpeech\CustomVoice`, and that snapshot is what the
+"BestSpeech Custom Voice" token speaks. Tune Granny's Russian until it sounds right,
+close the dialog, and any SAPI application that selects the Custom Voice gets exactly
+that — while the ordinary tokens stay what they always were. Until the utility has
+been closed once, it speaks classic English with Fred's parameters.
+
+The same snapshot's parameters also drive the per-language custom tokens —
+"BestSpeech Custom Voice - Russian" always speaks Russian, with whatever pitch,
+inflection, head size, excitation and unvoiced volume the utility last saved. Ten
+languages publish one: Greek, Japanese and Polish are left out because their
+frontends ignore every voice command, so a custom token there could only duplicate
+the single voice they already have. The language-less token is registered under
+English (a token needs a language attribute) but speaks whatever language the
+snapshot names; the per-language ones carry their own language.
+
+Settings live under `HKEY_CURRENT_USER\Software\BestSpeech`: global values on the key
+itself, one subkey per voice under `Voices\`, and the Custom Voice snapshot under
+`CustomVoice\`. A value that is absent means "use the built-in default", so deleting
+the key — or pressing "Reset everything" — returns the engine to exactly its
+out-of-the-box sound.
 
 ## Engine quirks this works around
 
@@ -221,7 +307,9 @@ sapi_probe32.exe output\BestspeechSAPI.dll rus 11 out.wav "Hello world" --rate 5
 |---|---|
 | `src/engines.hpp` | The engine and voice tables: languages, LCIDs, sample rates, capabilities |
 | `src/text_pipeline.cpp` | Sanitizing, transliteration, number words, inline command prefixes |
+| `src/user_settings.hpp` | The user settings, shared by the engine and the configuration utility |
 | `src/ISpTTSEngineImpl.cpp` | The SAPI engine itself |
+| `tools/bestspeech_config.cpp` | The configuration utility dialog |
 | `src/b32_wrapper.cpp` | Loader for `b32_wrapper.dll`, the shim that drives both engine families |
 | `src/bestspeech_server.cpp` | 32-bit worker for 64-bit hosts |
 | `src/sapi_main.cpp` | COM registration and voice token registration |

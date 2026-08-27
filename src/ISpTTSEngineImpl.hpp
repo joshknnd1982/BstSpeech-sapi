@@ -50,6 +50,15 @@ private:
     ISpObjectTokenPtr token_;
     voice_attributes voice_;
 
+    // custom_: this token speaks with the parameters the configuration utility
+    // last saved into HKCU\Software\BestSpeech\CustomVoice, re-read for every
+    // utterance. custom_engine_: the engine, too, follows that snapshot --
+    // true only for the language-less "BestSpeech Custom Voice" token
+    // (BstEngine "custom"); the per-language custom tokens (BstCustom "1")
+    // pin their engine and take just the parameters.
+    bool custom_ = false;
+    bool custom_engine_ = false;
+
 #ifndef BUILD_X64
     // Loaded lazily on the thread that synthesizes, never in the constructor: the
     // engine binds its buffer-release message window to whichever thread first runs

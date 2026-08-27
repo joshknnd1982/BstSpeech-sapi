@@ -51,6 +51,7 @@ copy /Y "bin\b32_helper.exe"  "%OUTPUT_DIR%\" >nul || exit /b 1
 copy /Y "bin\b32_tts.dll"     "%OUTPUT_DIR%\" >nul || exit /b 1
 copy /Y "bin\dll_*.dll"       "%OUTPUT_DIR%\" >nul || exit /b 1
 copy /Y "%BUILD_DIR_X86%\bin\Release\BestSpeechDiagnostics.exe" "%OUTPUT_DIR%\" >nul || exit /b 1
+copy /Y "%BUILD_DIR_X86%\bin\Release\BestSpeechConfig.exe" "%OUTPUT_DIR%\" >nul || exit /b 1
 copy /Y "%BUILD_DIR_X64%\bin\Release\BestspeechSAPI.dll"   "%OUTPUT_DIR%\x64\" >nul || exit /b 1
 copy /Y "%BUILD_DIR_X64%\bin\Release\BestSpeechDiagnostics.exe" "%OUTPUT_DIR%\x64\" >nul || exit /b 1
 echo.

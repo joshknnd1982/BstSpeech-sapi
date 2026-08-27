@@ -60,6 +60,19 @@ NO_INFLECTION = {"ger"}
 # check still catches any duplicate that is not a known engine limitation.
 KNOWN_ALIKE = {"dut": {("Bruno", "Ghost")}}
 
+# The ~n text-parser switches the configuration utility may send to each engine.
+# Kept in step with parser_cmds in src/engines.hpp: every command-accepting
+# engine takes all ten ~n switches, and every one but Hebrew takes ~~2 as well
+# (the Hebrew dll crashes outright on ~~2,1] followed by text). Check 6 verifies
+# each switch is swallowed, never read aloud. The modes persist inside an engine
+# session, so each check turns its switch on and straight back off.
+ALL_N = list(range(1, 11))
+PARSER_CMDS = {
+    "classic": ALL_N, "eng": ALL_N, "dut": ALL_N, "fre": ALL_N, "ger": ALL_N,
+    "heb": ALL_N, "ita": ALL_N, "por": ALL_N, "rus": ALL_N, "spa": ALL_N,
+}
+PARSER_IMMEDIATE = {"classic", "eng", "dut", "fre", "ger", "ita", "por", "rus", "spa"}
+
 # name, headsize, excitation, inflection, unvoiced, pitch -- mirrors voices[] in engines.hpp
 VOICES = [
     ("Fred", 1, 3, 0, 0, 80), ("Sara", 2, 3, -20, 0, 175), ("Hary", 3, 3, 10, 0, 65),
@@ -326,6 +339,37 @@ def main():
             rep.check(not spoken, engine_id,
                       "engine reads these commands aloud instead of obeying them: %s"
                       % " ".join(spoken))
+
+        # 6. the parser switches the configuration utility may send (parser_cmds in
+        # src/engines.hpp) are swallowed, not spoken: each turned on and straight
+        # back off must produce nothing audible (the on-then-off form is what the
+        # engine actually receives -- prefix sets, suffix restores -- and it keeps
+        # the session clean for the next check). Stating every switch explicitly
+        # ahead of a sentence must not truncate it either.
+        spoken_switches = []
+        probes = [("~n%d" % n, "~n%d,1]~n%d,0]" % (n, n))
+                  for n in PARSER_CMDS.get(engine_id, [])]
+        if engine_id in PARSER_IMMEDIATE:
+            probes.append(("~~2", "~~2,1]~~2,0]"))
+        for name, probe_cmd in probes:
+            sp = eng.speak(probe_cmd.encode("utf-8"))
+            if sp is None:
+                spoken_switches.append("%s(crash)" % name)
+                eng.restart()
+                continue
+            sst = stats(sp, eng.sample_rate)
+            if sst["secs"] > 0.3 and sst["peak"] > 500:
+                spoken_switches.append(name)
+        rep.check(not spoken_switches, engine_id,
+                  "engine reads these parser switches aloud: %s" % " ".join(spoken_switches))
+        if PARSER_CMDS.get(engine_id):
+            explicit = "".join("~n%d,0]" % n for n in PARSER_CMDS[engine_id])
+            fp = eng.speak((command_prefix(engine_id, VOICES[0]) + explicit + text)
+                           .encode("utf-8", "replace"))
+            fsecs = stats(fp, eng.sample_rate)["secs"] if fp else 0.0
+            rep.check(fsecs > ref_secs * 0.8, engine_id,
+                      "explicit parser switches truncate speech (%.2fs vs %.2fs)"
+                      % (fsecs, ref_secs))
 
         print("%-9s %-6d %-22s %d ok%s" % (
             engine_id, eng.sample_rate, "%.2fs peak %d" % (st["secs"], st["peak"]),

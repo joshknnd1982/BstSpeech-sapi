@@ -1,0 +1,69 @@
+// Dialog for the BestSpeech configuration utility.
+//
+// The template is what makes the utility accessible: every control is preceded
+// IMMEDIATELY by its label in resource order -- screen readers name a slider or
+// combo box from the nearest preceding static, so nothing (not even the little
+// numeric value display) may sit between a label and its control. The value
+// displays therefore come after their sliders. Every label carries a unique
+// access key, and resource order is tab order. The code additionally pins an
+// explicit accessible name onto every slider and combo box, so the name no
+// longer depends on the heuristic at all.
+#include <windows.h>
+#include "bestspeech_config_res.h"
+
+IDD_MAIN DIALOGEX 0, 0, 408, 292
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CAPTION "BestSpeech Configuration"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "&Language:", -1, 7, 9, 55, 8
+    COMBOBOX        IDC_LANGUAGE, 66, 7, 127, 140, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Voice:", -1, 7, 27, 55, 8
+    COMBOBOX        IDC_VOICE, 66, 25, 127, 160, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
+    GROUPBOX        "Voice settings", -1, 7, 45, 186, 168
+    LTEXT           "&Pitch (43 to 413 hertz):", -1, 14, 58, 130, 8
+    CONTROL         "", IDC_PITCH, "msctls_trackbar32",
+                    TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 14, 69, 172, 15
+    RTEXT           "", IDC_PITCH_VAL, 146, 58, 40, 8
+    LTEXT           "&Inflection (-300 flat to 100 lively):", -1, 14, 89, 130, 8
+    CONTROL         "", IDC_INFLECTION, "msctls_trackbar32",
+                    TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 14, 100, 172, 15
+    RTEXT           "", IDC_INFLECTION_VAL, 146, 89, 40, 8
+    LTEXT           "&Unvoiced volume (-70 to 20 dB):", -1, 14, 120, 130, 8
+    CONTROL         "", IDC_UNVOICED, "msctls_trackbar32",
+                    TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 14, 131, 172, 15
+    RTEXT           "", IDC_UNVOICED_VAL, 146, 120, 40, 8
+    LTEXT           "&Head size (0 to 6, classic English only):", -1, 14, 152, 136, 8
+    COMBOBOX        IDC_HEADSIZE, 154, 150, 32, 90, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Excitation:", -1, 14, 171, 60, 8
+    COMBOBOX        IDC_EXCITATION, 78, 169, 108, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Reset this voice", IDC_RESET_VOICE, 14, 190, 80, 14
+
+    GROUPBOX        "Speech", -1, 200, 7, 201, 76
+    LTEXT           "Ra&te (25 to 400 percent of normal):", -1, 207, 20, 148, 8
+    CONTROL         "", IDC_RATE, "msctls_trackbar32",
+                    TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 207, 31, 188, 15
+    RTEXT           "", IDC_RATE_VAL, 355, 20, 40, 8
+    LTEXT           "Volu&me adjustment (-40 to 12 dB):", -1, 207, 51, 148, 8
+    CONTROL         "", IDC_VOLUME, "msctls_trackbar32",
+                    TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 207, 62, 188, 15
+    RTEXT           "", IDC_VOLUME_VAL, 355, 51, 40, 8
+
+    GROUPBOX        "Text processing", -1, 200, 88, 201, 170
+    AUTOCHECKBOX    "&Number processing (read numbers as words)", IDC_NUMPROC, 207, 101, 188, 10
+    AUTOCHECKBOX    "Expand &abbreviations", IDC_ABBREV, 207, 115, 188, 10
+    AUTOCHECKBOX    "Phra&se prediction (do not wait for punctuation)", IDC_PHRASEPRED, 207, 129, 188, 10
+    AUTOCHECKBOX    "Spell out all &words", IDC_SPELL, 207, 143, 188, 10
+    AUTOCHECKBOX    "Spea&k punctuation", IDC_PUNCT, 207, 157, 188, 10
+    AUTOCHECKBOX    "Speak spaces and line &breaks", IDC_WHITESPACE, 207, 171, 188, 10
+    AUTOCHECKBOX    "Speak times &of day naturally", IDC_TIMES, 207, 185, 188, 10
+    AUTOCHECKBOX    "Read long numbers in &full without grouping", IDC_FULLNUM, 207, 199, 188, 10
+    AUTOCHECKBOX    "Speak &capitalized letter groups as words", IDC_CAPS, 207, 213, 188, 10
+    AUTOCHECKBOX    "Mathematical te&xt mode", IDC_MATH, 207, 227, 188, 10
+    AUTOCHECKBOX    "Rea&d control characters", IDC_CTRLCHARS, 207, 241, 188, 10
+
+    PUSHBUTTON      "Pla&y sample", IDC_PREVIEW, 7, 271, 70, 14
+    PUSHBUTTON      "Reset everythin&g", IDC_RESET_ALL, 84, 271, 80, 14
+    DEFPUSHBUTTON   "Close", IDOK, 338, 271, 63, 14
+END
