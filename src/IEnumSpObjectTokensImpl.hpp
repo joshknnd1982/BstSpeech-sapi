@@ -9,6 +9,7 @@
 #include <comip.h>
 
 #include "com.hpp"
+#include "install_selection.hpp"
 #include "voice_attributes.hpp"
 #include "voice_token.hpp"
 

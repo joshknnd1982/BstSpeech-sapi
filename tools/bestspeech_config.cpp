@@ -23,6 +23,7 @@
 #include <string>
 
 #include "engines.hpp"
+#include "install_selection.hpp"
 #include "user_settings.hpp"
 #include "voice_attributes.hpp"
 #include "voice_registry.hpp"
@@ -235,6 +236,34 @@ void load_global_controls(HWND dlg)
     }
 }
 
+// ---------------------------------------------------------------------------
+// The Language and Voice boxes list only what the installer actually put on this
+// machine, so an item's position is not its index in engines[] or voices[]. The real
+// index rides along as the item's data.
+// ---------------------------------------------------------------------------
+
+int combo_item_for(HWND combo, int data)
+{
+    const int n = static_cast<int>(SendMessageW(combo, CB_GETCOUNT, 0, 0));
+    for (int i = 0; i < n; ++i) {
+        if (static_cast<int>(SendMessageW(combo, CB_GETITEMDATA, i, 0)) == data) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int combo_selected_data(HWND dlg, int id, int fallback)
+{
+    HWND combo = GetDlgItem(dlg, id);
+    const int cur = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
+    if (cur < 0) {
+        return fallback;
+    }
+    const int data = static_cast<int>(SendMessageW(combo, CB_GETITEMDATA, cur, 0));
+    return (data == CB_ERR) ? fallback : data;
+}
+
 void rebuild_voice_combo(HWND dlg)
 {
     HWND combo = GetDlgItem(dlg, IDC_VOICE);
@@ -251,13 +280,24 @@ void rebuild_voice_combo(HWND dlg)
     }
 
     EnableWindow(combo, TRUE);
+    const sapi::install_selection& sel = sapi::install_selection::current();
     for (int i = 0; i < voice_count; ++i) {
-        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(voices[i].name));
+        if (!sel.has_voice(i)) {
+            continue;
+        }
+        const int item = static_cast<int>(
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(voices[i].name)));
+        SendMessageW(combo, CB_SETITEMDATA, item, i);
     }
-    if (g_voice < 0 || g_voice >= voice_count) {
-        g_voice = 0;
+
+    // The voice last edited may not be one of the installed ones, in which case the box
+    // opens on the first that is.
+    int cur = combo_item_for(combo, g_voice);
+    if (cur < 0) {
+        cur = 0;
     }
-    SendMessageW(combo, CB_SETCURSEL, g_voice, 0);
+    SendMessageW(combo, CB_SETCURSEL, cur, 0);
+    g_voice = combo_selected_data(dlg, IDC_VOICE, g_voice);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,9 +363,16 @@ void save_custom_voice()
 
 void on_init(HWND dlg)
 {
+    const sapi::install_selection& sel = sapi::install_selection::current();
+
     HWND langs = GetDlgItem(dlg, IDC_LANGUAGE);
     for (int i = 0; i < engine_count; ++i) {
-        SendMessageW(langs, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(engines[i].display));
+        if (!sel.has_engine(i)) {
+            continue;
+        }
+        const int item = static_cast<int>(
+            SendMessageW(langs, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(engines[i].display)));
+        SendMessageW(langs, CB_SETITEMDATA, item, i);
     }
 
     HWND head = GetDlgItem(dlg, IDC_HEADSIZE);
@@ -354,7 +401,15 @@ void on_init(HWND dlg)
         RegCloseKey(key);
     }
 
-    SendMessageW(langs, CB_SETCURSEL, g_engine, 0);
+    // As with the voice box: a language that is no longer installed falls back to the
+    // first one that is.
+    int cur = combo_item_for(langs, g_engine);
+    if (cur < 0) {
+        cur = 0;
+    }
+    SendMessageW(langs, CB_SETCURSEL, cur, 0);
+    g_engine = combo_selected_data(dlg, IDC_LANGUAGE, g_engine);
+
     rebuild_voice_combo(dlg);
     load_voice_controls(dlg);
     load_global_controls(dlg);
@@ -412,8 +467,7 @@ INT_PTR CALLBACK dialog_proc(HWND dlg, UINT msg, WPARAM wparam, LPARAM lparam)
         const int code = HIWORD(wparam);
 
         if (id == IDC_LANGUAGE && code == CBN_SELCHANGE) {
-            g_engine = static_cast<int>(
-                SendDlgItemMessageW(dlg, IDC_LANGUAGE, CB_GETCURSEL, 0, 0));
+            g_engine = combo_selected_data(dlg, IDC_LANGUAGE, g_engine);
             if (g_engine < 0 || g_engine >= engine_count) {
                 g_engine = 0;
             }
@@ -423,8 +477,7 @@ INT_PTR CALLBACK dialog_proc(HWND dlg, UINT msg, WPARAM wparam, LPARAM lparam)
             return TRUE;
         }
         if (id == IDC_VOICE && code == CBN_SELCHANGE) {
-            g_voice = static_cast<int>(
-                SendDlgItemMessageW(dlg, IDC_VOICE, CB_GETCURSEL, 0, 0));
+            g_voice = combo_selected_data(dlg, IDC_VOICE, g_voice);
             if (g_voice < 0 || g_voice >= voice_count) {
                 g_voice = 0;
             }

@@ -4,6 +4,7 @@
 #include <sapi.h>
 #include <string>
 
+#include "install_selection.hpp"
 #include "registry.hpp"
 #include "voice_attributes.hpp"
 
@@ -41,13 +42,22 @@ inline constexpr const wchar_t* custom_token_name = L"BestSpeech Custom Voice";
 // Every voice is written as its own static token rather than being produced by a
 // dynamic token enumerator. Static tokens are what every SAPI5 client reads, including
 // Windows Narrator, so this is the form with the widest compatibility.
-inline void write_voice_tokens(HKEY root, const std::wstring& clsid_str)
+//
+// Only the languages and character voices the selection names are published, which is
+// how the installer's component page reaches the voice list. remove_voice_tokens still
+// sweeps the full set whatever the selection says, so narrowing it on a reinstall leaves
+// nothing behind: the installer unregisters before it registers.
+inline void write_voice_tokens(HKEY root, const std::wstring& clsid_str,
+                               const install_selection& selection)
 {
     using namespace Bestspeech::registry;
 
     key tokens(root, voices_path, KEY_CREATE_SUB_KEY | KEY_SET_VALUE, true);
 
     for (int i = 0; i < total_token_count(); ++i) {
+        if (!selection.has_token(i)) {
+            continue;
+        }
         const voice_attributes v(i);
         const std::wstring name = v.get_name();
 
@@ -70,9 +80,15 @@ inline void write_voice_tokens(HKEY root, const std::wstring& clsid_str)
         attrs.set(L"BstVoice", v.get_voice_id());
     }
 
-    // The Custom Voice. Registered under English since a token needs a language,
-    // but its actual engine -- and so its actual language -- is read from HKCU
-    // each time it speaks. No Gender attribute: the user's parameters decide.
+    // The Custom Voice is its own component, so a user who does not want a sculpted
+    // voice in their voice list does not get one.
+    if (!selection.has_custom()) {
+        return;
+    }
+
+    // Registered under English since a token needs a language, but its actual engine --
+    // and so its actual language -- is read from HKCU each time it speaks. No Gender
+    // attribute: the user's parameters decide.
     key token(tokens, custom_token_id, KEY_CREATE_SUB_KEY | KEY_SET_VALUE, true);
     token.set(custom_token_name);
     token.set(L"CLSID", clsid_str);
@@ -86,13 +102,13 @@ inline void write_voice_tokens(HKEY root, const std::wstring& clsid_str)
     attrs.set(L"BstEngine", L"custom");
     attrs.set(L"BstVoice", L"0");
 
-    // And one custom token per language, each pinned to its engine with a real
+    // And one custom token per installed language, each pinned to its engine with a real
     // Language attribute, all sharing the snapshot's parameters. The three
     // engines whose frontend ignores every voice command (Greek, Japanese,
     // Polish) are left out: a custom token there could only duplicate the
     // single voice they already publish.
     for (int e = 0; e < engine_count; ++e) {
-        if (engines[e].commands == cmd_mode::none) {
+        if (engines[e].commands == cmd_mode::none || !selection.has_engine(e)) {
             continue;
         }
         const std::wstring name =

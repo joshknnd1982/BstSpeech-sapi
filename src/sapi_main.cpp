@@ -34,7 +34,8 @@ void register_voice_tokens()
 {
     Bestspeech::sapi::write_voice_tokens(
         HKEY_LOCAL_MACHINE,
-        clsid_to_string(__uuidof(Bestspeech::sapi::ISpTTSEngineImpl)));
+        clsid_to_string(__uuidof(Bestspeech::sapi::ISpTTSEngineImpl)),
+        Bestspeech::sapi::install_selection::current());
 }
 
 void unregister_voice_tokens() noexcept

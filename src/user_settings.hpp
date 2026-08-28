@@ -5,6 +5,7 @@
 #include <string>
 
 #include "engines.hpp"
+#include "install_selection.hpp"
 
 // User-adjustable speech settings, shared between the SAPI engine and the
 // BestSpeech configuration utility.
@@ -191,10 +192,25 @@ struct custom_voice
     voice_info voice = voices[0];  // Fred's parameters until configured
 };
 
+// The engine the Custom Voice should speak with, given what the installer put on this
+// machine. A snapshot naming a language that was left out -- or that a later run of the
+// installer removed -- would send the engine after a dll that is not there, so it falls
+// back to the first language that is installed.
+[[nodiscard]] inline int installed_engine_or_first(int wanted)
+{
+    const sapi::install_selection& sel = sapi::install_selection::current();
+    if (sel.has_engine(wanted)) {
+        return wanted;
+    }
+    const int first = sel.first_engine();
+    return (first >= 0) ? first : 0;
+}
+
 [[nodiscard]] inline custom_voice load_custom_voice()
 {
     custom_voice c;
     c.voice.name = L"Custom";
+    c.engine_index = installed_engine_or_first(c.engine_index);
 
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, CUSTOM_KEY, 0, KEY_READ, &key) != ERROR_SUCCESS) {
@@ -212,7 +228,7 @@ struct custom_voice
         }
         const int e = engine_by_id(narrow);
         if (e >= 0) {
-            c.engine_index = e;
+            c.engine_index = installed_engine_or_first(e);
         }
     }
     c.voice.pitch      = detail::get_int(key, L"PitchHz",    c.voice.pitch,      PITCH_MIN_HZ, PITCH_MAX_HZ);

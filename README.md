@@ -59,6 +59,54 @@ Run `BestSpeechSAPI_Setup.exe` and accept the elevation prompt — registering v
 writes to `HKEY_LOCAL_MACHINE`. The voices appear immediately in any SAPI5 application;
 restart the application if it caches its voice list.
 
+### Choosing what gets installed
+
+All 143 voices is a lot to scroll past in a voice list, and most people want a handful.
+The wizard's **Choose languages and voices** page has two branches you tick
+independently:
+
+* **Languages** — the thirteen engines. Each one is its own DLL, so leaving a language
+  out saves its disk space as well as its entries in the voice list.
+* **Character voices** — Fred, Sara, Hary and the other eleven. These cost nothing on
+  disk: a character voice is a set of engine parameters, not a file.
+
+The two are **crossed**. Tick five languages and three character voices and you get
+fifteen voices, not five and not three. Greek, Japanese and Polish sit outside the cross
+— their frontends ignore every voice command, so each contributes exactly one voice
+whatever is ticked under Character voices. The **Custom Voice** is a third, separate
+tick. The Ready page tells you how many voices you are about to get.
+
+Four ready-made choices are offered before the page, and picking one just pre-ticks the
+boxes, which you are then free to change:
+
+| Setup type | What it ticks | Voices |
+|---|---|---|
+| Everything | all 13 languages, all 14 character voices | 143, or 154 with the Custom Voice |
+| English only | both English engines, all 14 character voices | 28, or 31 with the Custom Voice |
+| Compact | English with Fred, Sara, Hary and Wendy | 4, or 6 with the Custom Voice |
+| Custom | whatever you tick yourself | as many as you tick |
+
+To change your mind later, run the installer again and tick a different set. Languages
+you untick have their engine DLL deleted and their voices unregistered; languages you
+add are registered on the spot. Nothing else about your setup is disturbed — the
+per-voice parameters you saved in the configuration utility live under
+`HKEY_CURRENT_USER` and survive.
+
+The choice is recorded in plain text as `voices.ini` in the install directory:
+
+```ini
+[Selection]
+Languages=classic,eng,spa
+Voices=Fred,Sara,Kit
+CustomVoice=1
+```
+
+That file is what the engine reads when it registers its tokens, and what the
+configuration utility and the diagnostics tool read to know what is installed. Editing
+it by hand changes nothing until the engine is registered again, so run the installer
+instead. If the file is missing altogether — a developer build registered by hand with
+`regsvr32` — everything is published, exactly as it was before this was configurable.
+
 ## The configuration utility
 
 "BestSpeech configuration" on the Start menu (`BestSpeechConfig.exe` in the install
@@ -254,6 +302,9 @@ automatically. Both paths are covered by the verification suite.
 writes a report to `%LOCALAPPDATA%\BestSpeech\diagnostics.txt`. It changes nothing --
 no registration, no settings, no default voice. A 64-bit copy sits in the `x64` folder.
 
+It reads `voices.ini` too, so a voice you chose not to install is reported as "not
+installed" rather than counted as a fault.
+
 ## Building from source
 
 ```batch
@@ -308,11 +359,13 @@ sapi_probe32.exe output\BestspeechSAPI.dll rus 11 out.wav "Hello world" --rate 5
 | `src/engines.hpp` | The engine and voice tables: languages, LCIDs, sample rates, capabilities |
 | `src/text_pipeline.cpp` | Sanitizing, transliteration, number words, inline command prefixes |
 | `src/user_settings.hpp` | The user settings, shared by the engine and the configuration utility |
+| `src/install_selection.hpp` | Reads `voices.ini`: which languages and voices the installer put here |
 | `src/ISpTTSEngineImpl.cpp` | The SAPI engine itself |
 | `tools/bestspeech_config.cpp` | The configuration utility dialog |
 | `src/b32_wrapper.cpp` | Loader for `b32_wrapper.dll`, the shim that drives both engine families |
 | `src/bestspeech_server.cpp` | 32-bit worker for 64-bit hosts |
 | `src/sapi_main.cpp` | COM registration and voice token registration |
+| `installer/BestspeechSAPI.iss` | The installer, including the language and voice component pages |
 | `tools/translit_ref.py` | Transliteration and number tables, and the reference implementation |
 | `tools/gen_translit.py` | Generates `src/translit_tables.inc` from those tables |
 

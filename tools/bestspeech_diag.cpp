@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "engines.hpp"
+#include "install_selection.hpp"
 #include "voice_attributes.hpp"
 #include "voice_registry.hpp"
 
@@ -146,8 +147,12 @@ int wmain(int argc, wchar_t** argv)
     report(L"This program is %d-bit, so it reads the %d-bit voice registrations.\n\n",
            (int)(sizeof(void*) * 8), (int)(sizeof(void*) * 8));
 
-    int silent = 0, unloadable = 0, spoke = 0;
+    int silent = 0, unloadable = 0, spoke = 0, skipped = 0;
     std::vector<std::wstring> problems;
+
+    // A voice the user chose not to install is absent on purpose, so it is listed as
+    // "not installed" and kept out of the fault counts entirely.
+    const sapi::install_selection& selection = sapi::install_selection::current();
 
     for (int e = 0; e < engine_count; ++e) {
         if (!only.empty() && only != engines[e].id) {
@@ -163,6 +168,12 @@ int wmain(int argc, wchar_t** argv)
         for (int vi = 0; vi < engines[e].voice_count; ++vi) {
             const sapi::voice_attributes v(first + vi);
             const std::wstring id = v.get_token_id();
+
+            if (!selection.has_token(e, vi)) {
+                ++skipped;
+                report(L"   %-28s not installed\n", id.c_str());
+                continue;
+            }
 
             ISpObjectToken* token = nullptr;
             HRESULT hr = load_token(v, &token);
@@ -214,6 +225,10 @@ int wmain(int argc, wchar_t** argv)
     report(L"----------------------------------------------------------------\n");
     report(L"%d voices spoke, %d were silent, %d were not registered.\n",
            spoke, silent, unloadable);
+    if (skipped > 0) {
+        report(L"%d more were not selected when BestSpeech was installed. "
+               L"Run the installer again to add them.\n", skipped);
+    }
     if (!problems.empty()) {
         report(L"\nProblems:\n");
         for (const std::wstring& p : problems) {

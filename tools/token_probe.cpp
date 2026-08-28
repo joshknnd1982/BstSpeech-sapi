@@ -451,7 +451,10 @@ int wmain(int argc, wchar_t** argv)
             wchar_t full[MAX_PATH];
             GetFullPathNameW(argv[2], MAX_PATH, full, nullptr);
             register_com(full);
-            sapi::write_voice_tokens(HKEY_CURRENT_USER, clsid_string());
+            // The probe registers the whole set whatever an installer may have selected
+            // on this machine, so a test run is never quietly narrowed.
+            sapi::write_voice_tokens(HKEY_CURRENT_USER, clsid_string(),
+                                     sapi::install_selection());
             wprintf(L"registered %d voices for the current user, engine %s\n",
                     total_token_count(), full);
             rc = 0;

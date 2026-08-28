@@ -14,9 +14,14 @@ IEnumSpObjectTokensImpl::IEnumSpObjectTokensImpl(bool initialize)
         return;
     }
 
+    // Only what the installer put on this machine, so the dynamic enumeration agrees
+    // with the static tokens DllRegisterServer wrote.
+    const install_selection& selection = install_selection::current();
     sapi_voices_.reserve(static_cast<size_t>(total_token_count()));
     for (int i = 0; i < total_token_count(); ++i) {
-        sapi_voices_.emplace_back(i);
+        if (selection.has_token(i)) {
+            sapi_voices_.emplace_back(i);
+        }
     }
 }
 
