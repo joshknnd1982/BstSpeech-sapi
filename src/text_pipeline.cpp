@@ -35,6 +35,15 @@ struct translit_rule
     return c >= L'0' && c <= L'9';
 }
 
+// Whether a neighbouring character makes a letter part of a word rather than one
+// standing on its own. Everything outside ascii counts as a word character: German
+// text is full of umlauts and eszett, and iswalnum in the default C locale calls those
+// punctuation, which would leave the h of an umlauted "aeh" looking like a lone letter.
+[[nodiscard]] bool is_word_char(wchar_t c)
+{
+    return c >= 0x80 || is_latin(c) || is_digit(c);
+}
+
 // ---------------------------------------------------------------------------
 // Transliteration
 // ---------------------------------------------------------------------------
@@ -497,6 +506,34 @@ void fix_v2_quirks(std::wstring& s)
     s.swap(out);
 }
 
+// A letter standing alone is read out by name, and where the frontend's own name for
+// it is wrong -- see letter_fix in engines.hpp -- the text is the only place left to
+// correct it. Only a letter with no word character on either side is rewritten, so
+// "3h" and every h inside a word keep the reading the engine already gets right.
+void fix_lone_letters(std::wstring& s, const letter_fix* fixes)
+{
+    std::wstring out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        const letter_fix* hit = nullptr;
+        if ((i == 0 || !is_word_char(s[i - 1])) &&
+            (i + 1 >= s.size() || !is_word_char(s[i + 1]))) {
+            for (const letter_fix* f = fixes; f->letter != 0; ++f) {
+                if (f->letter == lower_ascii(s[i])) {
+                    hit = f;
+                    break;
+                }
+            }
+        }
+        if (hit) {
+            out += hit->spelled;
+        } else {
+            out += s[i];
+        }
+    }
+    s.swap(out);
+}
+
 }  // namespace
 
 std::wstring number_to_words(unsigned long long n, number_mode mode)
@@ -558,6 +595,11 @@ std::wstring prepare(const std::wstring& text, const engine_info& eng)
         if (is_unsafe(c, eng)) {
             c = L' ';
         }
+    }
+
+    // Last, so that a character blanked just above is already a word boundary here.
+    if (eng.letter_fixes) {
+        fix_lone_letters(s, eng.letter_fixes);
     }
 
     collapse_spaces(s);

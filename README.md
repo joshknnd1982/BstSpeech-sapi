@@ -207,6 +207,15 @@ guesswork, and each is re-checked by `tools/verify_engines.py`.
   loudest voices hit the engine's internal limiter.
 - **`~v` headsize is ignored by every 2006 engine,** and Dutch additionally ignores `~e`
   excitation, which is why its Bruno and Ghost voices are indistinguishable.
+- **German misnames the letter H.** A lone letter is expanded by these frontends into
+  its spoken name -- synthesizing `y` on the German DLL and synthesizing the text
+  "Ypsilon" give byte-identical audio -- and every engine gets its own letters right
+  except this one. German's H comes back as two syllables around a "zh"-like fricative,
+  1.107s against a 0.666s median for its other twenty-five letters and longer even than
+  its own "Ypsilon", so anything reading letters singly -- a screen reader echoing
+  characters, a spelled word -- said "zh" at every H. The DLL cannot be repaired, so a
+  lone `h` is rewritten to "ha", the German name of the letter, which it reads as a
+  normal 0.76s syllable. An `h` inside a word was always correct and is left alone.
 - **German has no inflection command at all.** Rather than obeying `~h` it reads the
   command out as text, so a stray fragment was spoken ahead of every German utterance —
   and because it landed before the gain command had been applied, that fragment was

@@ -54,6 +54,16 @@ CLASSIC = {"classic"}
 # inflection flag in src/engines.hpp.
 NO_INFLECTION = {"ger"}
 
+# Letters whose spoken name the frontend gets wrong, and which the text pipeline
+# therefore rewrites before the dll sees them. A lone letter is expanded into its name
+# by every one of these frontends -- synthesizing "y" on the German dll and synthesizing
+# the text "Ypsilon" return byte-identical audio -- and German's h is the one broken
+# entry: two syllables around a postalveolar fricative, 1.107s against a 0.666s median
+# for its other letters and longer than its own "Ypsilon". Check 7 measures that the
+# rewrite is reaching the dll. Kept in step with letter_fixes in src/engines.hpp.
+LETTER_FIXES = {"ger": "h"}
+LETTERS = "abcdefghijklmnopqrstuvwxyz"
+
 # Voice pairs a given engine genuinely cannot tell apart, because its frontend ignores
 # the one command that separates them. The Dutch dll ignores ~e excitation, so Bruno and
 # Ghost -- identical but for excitation -- collapse onto each other there. Listed so the
@@ -370,6 +380,30 @@ def main():
             rep.check(fsecs > ref_secs * 0.8, engine_id,
                       "explicit parser switches truncate speech (%.2fs vs %.2fs)"
                       % (fsecs, ref_secs))
+
+        # 7. a letter the frontend misnames must reach the dll rewritten. Measured
+        # against this engine's own median letter, so the check does not depend on
+        # rate, voice or sample rate: a letter name is a letter name, and the broken
+        # reading is two thirds longer than one. Needs the pipeline probe -- without
+        # it prepared() hands back the raw text and there is nothing to measure.
+        letter_fault = []
+        if probe and engine_id in LETTER_FIXES:
+            spans = {}
+            for ch in LETTERS:
+                lp = eng.speak(prepared(probe, engine_id, ch).encode("utf-8", "replace"))
+                if lp is None:
+                    eng.restart()
+                    continue
+                spans[ch] = stats(lp, eng.sample_rate)["secs"]
+            ordered = sorted(spans.values())
+            median = ordered[len(ordered) // 2] if ordered else 0.0
+            for ch in LETTER_FIXES[engine_id]:
+                if median > 0 and spans.get(ch, 0.0) > median * 1.4:
+                    letter_fault.append("%s=%.3fs vs %.3fs median"
+                                        % (ch, spans[ch], median))
+            rep.check(not letter_fault, engine_id,
+                      "lone letters still misread by the frontend: %s"
+                      % ", ".join(letter_fault))
 
         print("%-9s %-6d %-22s %d ok%s" % (
             engine_id, eng.sample_rate, "%.2fs peak %d" % (st["secs"], st["peak"]),

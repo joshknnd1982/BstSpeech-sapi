@@ -45,6 +45,31 @@ enum class number_mode { native, greek, polish, japanese };
 inline constexpr unsigned PARSER_IMMEDIATE = 1u << 10;
 inline constexpr unsigned PARSER_NONE = 0;
 
+// A letter standing on its own is expanded by these frontends into its spoken name:
+// synthesizing "y" on the German dll and synthesizing the text "Ypsilon" return
+// byte-identical audio, and the same holds everywhere -- Spanish "hache", Italian
+// "acca", Dutch "haa", English "aitch", Portuguese "aga". Every engine gets its own
+// letters right but one: the German h is two syllables around a postalveolar
+// fricative, 1.107s against a 0.666s median for its other twenty-five letters and
+// longer even than its own "Ypsilon", so anything that reads letters singly -- a
+// screen reader's character echo, a spelled word, a SPVA_SpellOut fragment -- says
+// something like "zh" wherever an h appears. The dll cannot be repaired, but the text
+// going into it can. Each entry names a letter whose table entry is broken and the
+// spelling that is read correctly instead; the table ends at a zero letter.
+struct letter_fix
+{
+    wchar_t        letter;   // lowercase; matched against a lone letter of either case
+    const wchar_t* spelled;
+};
+
+// "ha" is the German name of the letter, and the dll reads it as a normal 0.76s
+// syllable, in line with every other letter name it holds. Checked per letter, per
+// dll, by tools/verify_engines.py.
+inline constexpr letter_fix ger_letter_fixes[] = {
+    { L'h', L"ha" },
+    { 0,    nullptr },
+};
+
 struct engine_info
 {
     const char*   id;             // short stable id, used in registry token ids
@@ -69,6 +94,9 @@ struct engine_info
     const wchar_t* decimal_word;  // a dot between digits is read as sentence punctuation,
                                   // so decimals are spelled out before anything else
     wchar_t       group_sep;      // thousands separator this frontend groups with
+    // Lone letters this frontend misnames, or nullptr where every letter name is
+    // right -- which is every engine except German. See letter_fix above.
+    const letter_fix* letter_fixes = nullptr;
 };
 
 // The classic engine peaks near full scale while the v2 dlls are far quieter (Russian
@@ -96,7 +124,7 @@ inline constexpr engine_info engines[] = {
     { "fre",     L"French",                 L"dll_fre.dll", L"40c", 0x040C, CP_UTF8,
       cmd_mode::tilde,   true,  PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"virgule",   L' ' },
     { "ger",     L"German",                 L"dll_ger.dll", L"407", 0x0407, CP_UTF8,
-      cmd_mode::tilde,   false, PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"Komma",     L'.' },
+      cmd_mode::tilde,   false, PARSER_COMMON, translit_mode::none,     number_mode::native,   10800, V2_GAIN_TRIM,  14, L"Komma",     L'.', ger_letter_fixes },
     { "gre",     L"Greek",                  L"dll_gre.dll", L"408", 0x0408, CP_UTF8,
       cmd_mode::none,    true,  PARSER_NONE,   translit_mode::greek,    number_mode::greek,    10800, V2_GAIN_TRIM,   1, L"\u03ba\u03cc\u03bc\u03bc\u03b1", L'.' },
     { "heb",     L"Hebrew",                 L"dll_heb.dll", L"40d", 0x040D, CP_UTF8,

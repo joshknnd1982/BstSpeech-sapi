@@ -14,7 +14,7 @@
 ; Build with build_all.bat, which stages output\ and then invokes ISCC on this file.
 
 #define AppName "BestSpeech SAPI5 Voices"
-#define AppVersion "3.1.0"
+#define AppVersion "3.1.1"
 #define AppPublisher "Gozaltech"
 #define AppURL "http://gozaltech.org"
 #define OutputDir "..\output"
