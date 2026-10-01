@@ -403,7 +403,7 @@ repository, including the speech engine binaries in `bin/`.
 - **Rommix**, who preserved the BestSpeech / Keynote Gold engines and shared them with the
   blind community, and who created the fourteen character voices
 - [**samtupy**](https://github.com/samtupy/b32tts_wrapper) for the engine shim
-  (`b32_wrapper.dll`, `b32_helper.exe`), released into the public domain — its source is
+  (`b32_wrapper.dll`, `b32_helper.exe`), released under the Unlicense — its source is
   what finally explained why some voices fell silent inside a host application
 - [**gozaltech**](https://github.com/gozaltech/bstspeech-sapi) for the original SAPI5
   wrapper this project is forked from
